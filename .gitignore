@@ -5,3 +5,8 @@
 .vscode/ipch
 sdconfig.old
 build
+sdkconfig.old
+setlist-esp32.code-workspace
+include/README
+lib/README
+test/README
