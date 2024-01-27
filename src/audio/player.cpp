@@ -13,7 +13,7 @@ Player::Player():
   processedSamplesTotalLen(0),
   playing(false),
   samplesIdx(0),
-  volume(0.1) {}
+  volume(0.3) {}
 
 
 Player::~Player() {}
@@ -51,6 +51,21 @@ bool Player::Replay() {
   samplesIdx = 0;
   playing = true;
   return true;
+}
+
+
+float Player::SetVolume(float _volume) {
+  if (_volume > 1 ) {
+    _volume = 1;  
+  } else if (_volume < 0) {
+    _volume = 0;
+  }
+
+  volume = _volume;
+
+  logPrintf(LOG_COMP_AUDIO, LOG_SEV_VERBOSE, "Set volume to %s\n", std::to_string(volume).c_str());
+
+  return volume;
 }
 
 
@@ -105,13 +120,16 @@ bool Player::WriteToDevice() {
     return false;
   }
 
+  samplesIdx = 0;
+  playing = false;
+/*
   samplesIdx += written;
   if (samplesIdx >= samples->len && !playThis->HasMoreData()) {
     // We've played the whole thing
     playing = false; // *** Is this correct for the MP3 case? Seems wrong...
     samplesIdx = 0;
   }
-
+*/
   return true;
 }
 
@@ -119,13 +137,6 @@ bool Player::WriteToDevice() {
 bool Player::processSamples() {
   // Apply effects processing. Right now this is just a volume adjustment (and 
   // it might stay that way).
-
-  static float volumeChange = 0.05;
-  if (volume >= 1 || volume <= 0) {
-    volumeChange = -volumeChange;
-  }
-
-  volume += volumeChange;
 
   try {
 
@@ -156,10 +167,16 @@ bool Player::processSamples() {
 
     int16_t *processedSamples16 = reinterpret_cast<int16_t*>(processedSamples.get());
 
-    //logPrintf(LOG_COMP_AUDIO, LOG_SEV_VERBOSE, "Applying volume of %s\n", std::to_string(volume).c_str());
+    // Volume could be changed by the UI thread, but putting a lock around seems unnecessary. We'll make a local
+    // copy of it here, so it doesn't get changed while we're using it.
+    float localVolume = volume;
 
+    //logPrintf(LOG_COMP_AUDIO, LOG_SEV_VERBOSE, "Applying volume of %s\n", std::to_string(localVolume).c_str());
+
+    // *** Need to come up with a logarithmic scale here, or something. Most of the volume change is near the bottom of the scale.
+    localVolume *= 3;
     for (uint16_t i = 0; i < samples16Len; i++) {
-      processedSamples16[i] = samples16[i] * volume; 
+      processedSamples16[i] = samples16[i] * localVolume; 
     }
 
     processedSamplesLen = samples->len;

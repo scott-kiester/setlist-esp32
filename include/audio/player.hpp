@@ -21,6 +21,9 @@ public:
   // Start over playing the current sample
   bool Replay();
 
+  float GetVolume() const { return volume; }
+  float SetVolume(float _volume);
+
   // Update the device with more data from playThis. Should be called 
   // frequently in a loop.
   bool WriteToDevice();

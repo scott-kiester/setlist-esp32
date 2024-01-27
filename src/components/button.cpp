@@ -33,6 +33,10 @@ void Button::Init() {
   CanvasState canvasState;
   ourCanvasState.Apply();
 
+  logPrintf(LOG_COMP_BUTTON, LOG_SEV_VERBOSE, "initButtonUL: x: %d y: %d w: %d h: %d oc: %d fc: %d fgc: %d ts: %d\n",
+    ourCanvasState.cursorX, ourCanvasState.cursorY, width, height, outlineColor, fillColor, ourCanvasState.fgColor,
+    ourCanvasState.textSize);
+
   tftButton.initButtonUL(
     TftManager::GetTft(),
     ourCanvasState.cursorX,

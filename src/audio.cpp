@@ -16,7 +16,7 @@
 // Flasher gets triggered from audio thread so they can stay in sync
 #define FLASHER_PIN 47
 #define FLASHER_DEFAULT_DELAY 1000
-#define FLASHER_DEFAULT_FLASH_DURATION 100
+#define FLASHER_DEFAULT_FLASH_DURATION 25
 
 #define TIME_TYPE unsigned long
 
@@ -37,7 +37,6 @@ enum AudioMessage_t {
   AM_PlayFile,
   AM_SetClickFile,
   AM_StartClick,
-  AM_StopClick,
   AM_PlayClick,
 };
 
@@ -84,6 +83,8 @@ public:
   void TurnOn();
   void TurnOffAfterDelay();
 
+  bool LedIsOn();
+
   static void Init();
 
 private:
@@ -96,6 +97,9 @@ void Flasher::Init() {
 }
 
 
+bool Flasher::LedIsOn() { return ledOnTime != 0; }
+
+
 void Flasher::TurnOn() {
   digitalWrite(FLASHER_PIN, HIGH);
   ledOnTime = millis();
@@ -104,7 +108,7 @@ void Flasher::TurnOn() {
 
 void Flasher::TurnOffAfterDelay() {
   TIME_TYPE now = millis();
-  if (ledOnTime != 0 && ledOnTime + FLASHER_DEFAULT_FLASH_DURATION > now) {
+  if (ledOnTime != 0 && ledOnTime + FLASHER_DEFAULT_FLASH_DURATION < now) {
     digitalWrite(FLASHER_PIN, LOW);
     ledOnTime = 0;    
   }
@@ -126,7 +130,11 @@ public:
 
   bool SetClickFile(const char *fileName);
   bool StartClick(uint16_t bpm);
-  bool StopClick();
+
+  void StartClick() { clickOn = true; }
+  void StopClick() { clickOn = false; }
+  void StartFlash() { flashOn = true; }
+  void StopFlash() { flashOn = false; }
 
 private:
   static void audioPlayerTaskInit(void *param);
@@ -141,7 +149,6 @@ private:
 
   void setClickFile(const char *fileName);
   void startClick(uint16_t bpm);
-  void stopClick();
   void playClick();
 
   TaskHandle_t audioTask;
@@ -158,6 +165,9 @@ private:
   std::string clickFile;
   uint32_t clickDelay;
   uint32_t lastClickPlayed;
+
+  bool clickOn;
+  bool flashOn;
 };
 
 
@@ -168,7 +178,9 @@ AudioPlayer::AudioPlayer():
   playingClick(false),
   clickFsImpl(NULL),
   clickDelay(0),
-  lastClickPlayed(0) {}
+  lastClickPlayed(0),
+  clickOn(true),
+  flashOn(true) {}
 
 
 AudioPlayer::~AudioPlayer() {
@@ -267,7 +279,15 @@ AudioMessage_t AudioPlayer::waitForMessage(AudioMessage *inMessage) {
   uint32_t curTime = millis();
   uint32_t playTime = lastClickPlayed + clickDelay;
   if (curTime < playTime) {
-    TickType_t ticksToWait = (playTime - curTime) * portTICK_PERIOD_MS; 
+    TickType_t ticksToWait = 0;
+    if (flasher.LedIsOn()) {
+      // Wait until it's time to turn off the LED
+      ticksToWait = FLASHER_DEFAULT_FLASH_DURATION * portTICK_PERIOD_MS;
+    } else {
+      // Wait until the next click
+      ticksToWait = (playTime - curTime) * portTICK_PERIOD_MS; 
+    }
+
     if (xQueueReceive(inMessages, inMessage, ticksToWait) == pdPASS) {
       // There's a message waiting. Process it.
       return inMessage->message;
@@ -320,17 +340,20 @@ void AudioPlayer::audioPlayerTask() {
         logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: Unknown message: %d\n", inMessage.message);
     }
 
-    AudioLib::Player::GetPlayer().WriteToDevice();
     flasher.TurnOffAfterDelay();
+    AudioLib::Player::GetPlayer().WriteToDevice();
   }
 }
 
 
 void AudioPlayer::playClick() {
-  flasher.TurnOn();
   lastClickPlayed = millis();
 
-  if (!clickWav.Valid()) {
+  if (flashOn) {
+    flasher.TurnOn();
+  }
+
+  if (!clickOn || !clickWav.Valid()) {
     return;
   }
 
@@ -388,24 +411,6 @@ void AudioPlayer::setClickFile(const char *fileName) {
     } else {
       logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: Failed to set click file to %s\n", fileName);  
     }
-
-/*
-    bool success = false;
-
-    // Probably should be doing memory allocation on the calling thread...
-    clickFsImpl = std::make_shared<SdCardMemFs>();
-    if (clickFsImpl) {
-      clickFs = std::make_shared<fs::FS>(clickFsImpl);
-      if (clickFs) {
-        success = true;
-        logPrintf(LOG_COMP_AUDIO, LOG_SEV_INFO, "AUDIO: SUCCESS: Set click file name to %s\n", clickFile.c_str());
-      } else {
-        logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: setClickFile: Failed to allocate fs::FS\n");  
-      }
-    } else {
-      logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: FAILURE: Set click file name to %s\n", clickFile.c_str());
-    }
-*/
 
     AmSingleTypeMessage<bool> retMessage(success);
     AudioMessage audioMessage(AM_SetClickFile, &retMessage);
@@ -494,6 +499,25 @@ bool AudioComp::StartClick(uint16_t bpm) {
 }
 
 
+bool AudioComp::StartClick() {
+  audioPlayer.StartClick();
+  return true;
+}
+
+
 bool AudioComp::StopClick() {
-  return false;
+  audioPlayer.StopClick();
+  return true;
+}
+
+
+bool AudioComp::StartFlash() {
+  audioPlayer.StartFlash();
+  return true;
+}
+
+
+bool AudioComp::StopFlash() {
+  audioPlayer.StopFlash();
+  return true;
 }

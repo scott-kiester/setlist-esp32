@@ -10,10 +10,23 @@
 TextBox::TextBox(CanvasState& canvasState, uint16_t _height):
   ComponentCanvas(canvasState),
   reservedHeight(_height),
-  fontHeight(0) {
-  ourCanvasState.datum = TL_DATUM;
-  ourCanvasState.cursorY += reservedHeight / 2; // Draw in the middle of the specified area
+  fontHeight(0),
+  width(0),
+  height(0) {
+    ourCanvasState.datum = TL_DATUM;
+    ourCanvasState.cursorY += reservedHeight / 2; // Draw in the middle of the specified area
 }
+
+TextBox::TextBox(CanvasState& canvasState, uint16_t _width, uint16_t _height):
+  ComponentCanvas(canvasState),
+  reservedHeight(_height),
+  fontHeight(0),
+  width(_width),
+  height(_height) {
+    ourCanvasState.datum = TL_DATUM;
+    ourCanvasState.cursorY += reservedHeight / 2; // Draw in the middle of the specified area
+}
+
 
 TextBox::~TextBox() {}
 
@@ -31,13 +44,21 @@ uint16_t TextBox::GetFontHeight() {
 
 
 void TextBox::SetText(const char *_text) {
-  text = _text;
+  try {
+    text = _text;
+  } catch (std::bad_alloc&) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "bad_alloc exception setting button text to %s\n", _text);
+  }
 }
 
 
 void TextBox::Update(const char *newText) {
-  text = newText;
-  Draw();
+  try {
+    text = newText;
+    Draw();
+  } catch (std::bad_alloc&) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "bad_alloc exception setting button text to %s\n", newText);
+  }
 }
 
 
@@ -47,8 +68,36 @@ void TextBox::Draw() {
   ourCanvasState.Apply();
 
   SetlistTft *tft = TftManager::GetTft();
-  tft->fillRect(ourCanvasState.cursorX, ourCanvasState.cursorY, tft->textWidth(text) + tft->getTextPadding(), tft->fontHeight(), ourCanvasState.bgColor);
-  tft->print(text);
+
+  uint16_t fillX, fillY, fillWidth, fillHeight;
+
+  if (width == 0 && height == 0) {
+    fillX = ourCanvasState.cursorX;
+    fillWidth = tft->textWidth(text.c_str()) + tft->getTextPadding();
+    fillHeight = tft->fontHeight();
+
+    // It seems that Y is below where the text is actually written. WTF? Clearly I'm misunderstanding something.
+    // (Does this have something to do with reservedHeight above? That looks weird... I'd love to know what I was thinking when I wrote that.)
+    fillY = ourCanvasState.cursorY;
+    if (fillY >= tft->fontHeight()) {
+      fillY -= tft->fontHeight();
+    } else {
+      // Bug
+      logPrintf(LOG_COMP_SCREEN, LOG_SEV_WARN, "Clearing textbox: cursorY (%d) is less than font height (%d)\n", fillY, tft->fontHeight());
+      fillY = 0;
+    }
+  } else {
+    fillX = ourCanvasState.cursorX;
+    fillY = ourCanvasState.cursorY - reservedHeight / 2;
+    fillWidth = width;
+    fillHeight = height;
+  }
+
+  tft->fillRect(fillX, fillY, fillWidth, fillHeight, ourCanvasState.bgColor);
+  tft->print(text.c_str());
+
+  logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Textbox filled background rect with color: %d, X: %d, Y: %d, Width: %d, Height: %d\n",
+    ourCanvasState.bgColor, fillX, fillY, fillWidth, fillHeight);
 
   // Cache the font height for other components that will ask for it.
   fontHeight = tft->fontHeight();
