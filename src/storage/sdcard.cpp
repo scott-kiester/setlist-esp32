@@ -114,6 +114,7 @@ bool SDCard::init(sdmmc_card_t **card) {
 
 void SDCard::Init() {
   sdmmc_card_t *card = NULL;
+  
   bool success = false;
   for (int i = 0; !success && i < 10; i++) {
     success = init(&card);
@@ -126,7 +127,12 @@ void SDCard::Init() {
     logPrintf(LOG_COMP_SDCARD, LOG_SEV_ERROR, "Giving up mounting SD card\n")
     return;
   }
-
+/*
+  if (!init(&card)) {
+    logLn(LOG_COMP_SDCARD, LOG_SEV_ERROR, "Failed to mount SD card\n");
+    return;
+  }
+*/
   listDir(SDCARD_ROOT);
 
   sdCard = new SDCard(card);

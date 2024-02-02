@@ -8,6 +8,7 @@
 #include "screen/setlist-screen.hpp"
 #include "storage/sdcard.hpp"
 #include "tftmanager.hpp"
+#include "trigger.hpp"
 
 
 /* For TFT_eSPI, below should be the contents of user_setup.h. PlatforIO
@@ -146,11 +147,13 @@ extern "C" void app_main() {
 
   printChipInfo();
 
+  Trigger::Init();
+
   // TftManager must be initialized before SD Card.
   TftManager::Init();
   SDCard::Init();
   AudioComp::Init();
-  
+
   TftManager::Calibrate();
 
   //ScreenManager::GetScreenManager()->ChangeScreen(SetlistScreen::GetSetlistScreen());

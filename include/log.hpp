@@ -21,6 +21,7 @@
 #define LOG_COMP_GENERAL    0x00001000
 #define LOG_COMP_AUDIO      0x00002000
 #define LOG_COMP_SERIALIZE  0x00004000
+#define LOG_COMP_TRIGGER    0x00010000
 
 enum LOG_SEVERITY {
   LOG_SEV_ERROR = 1,
@@ -34,7 +35,7 @@ enum LOG_SEVERITY {
 extern uint32_t logFlags;
 extern uint32_t logSeverity;
 
-#define IS_LOG_ENABLED(x) (LOG_ENABLED && (logFlags & x && logSeverity <= sev))
+#define IS_LOG_ENABLED(x, sev) (LOG_ENABLED && (logFlags & x && logSeverity <= sev))
 
 void logInit();
 

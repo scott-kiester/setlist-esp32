@@ -10,8 +10,8 @@ namespace AudioComp {
 
   bool SetClickFile(const char *fileName);
   bool StartClick(uint16_t bpm);
+  bool RestartClick(uint32_t startTime = 0);
 
-  bool StartClick();
   bool StopClick();
   bool StartFlash();
   bool StopFlash();

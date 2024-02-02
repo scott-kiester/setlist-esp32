@@ -143,7 +143,7 @@ public:
   virtual void OnPress() {
     clickOn = !clickOn;
     if (clickOn) {
-      AudioComp::StartClick();
+      AudioComp::RestartClick();
     } else {
       AudioComp::StopClick();
     }
@@ -380,17 +380,6 @@ void SetlistScreen::Show() {
 
 
   cs.cursorX += BOTTOM_ROW_ITEM_WIDTH;
-  tempoUpButton = new TempoUpButton(cs, BOTTOM_ROW_ITEM_WIDTH, BOTTOM_ROW_HEIGHT, this);
-  if (!tempoUpButton || !pushComponent(reinterpret_cast<Component**>(&tempoUpButton))) {
-    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc tempoUpButton\n");
-    return;    
-  }
-
-  tempoUpButton->SetColors(TFT_WHITE, TFT_BLUE);
-  tempoUpButton->Init();
-
-
-  cs.cursorX += BOTTOM_ROW_ITEM_WIDTH;
   tempoDownButton = new TempoDownButton(cs, BOTTOM_ROW_ITEM_WIDTH, BOTTOM_ROW_HEIGHT, this);
   if (!tempoDownButton || !pushComponent(reinterpret_cast<Component**>(&tempoDownButton))) {
     logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc tempoDownButton\n");
@@ -399,6 +388,17 @@ void SetlistScreen::Show() {
 
   tempoDownButton->SetColors(TFT_WHITE, TFT_BLUE);
   tempoDownButton->Init();
+
+
+  cs.cursorX += BOTTOM_ROW_ITEM_WIDTH;
+  tempoUpButton = new TempoUpButton(cs, BOTTOM_ROW_ITEM_WIDTH, BOTTOM_ROW_HEIGHT, this);
+  if (!tempoUpButton || !pushComponent(reinterpret_cast<Component**>(&tempoUpButton))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc tempoUpButton\n");
+    return;    
+  }
+
+  tempoUpButton->SetColors(TFT_WHITE, TFT_BLUE);
+  tempoUpButton->Init();
 
 
   Component::ManualDraw();

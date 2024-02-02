@@ -37,6 +37,7 @@ enum AudioMessage_t {
   AM_PlayFile,
   AM_SetClickFile,
   AM_StartClick,
+  AM_RestartClick,
   AM_PlayClick,
 };
 
@@ -130,6 +131,7 @@ public:
 
   bool SetClickFile(const char *fileName);
   bool StartClick(uint16_t bpm);
+  bool RestartClick(uint32_t startTime);
 
   void StartClick() { clickOn = true; }
   void StopClick() { clickOn = false; }
@@ -149,6 +151,7 @@ private:
 
   void setClickFile(const char *fileName);
   void startClick(uint16_t bpm);
+  void restartClick(uint32_t startTime);
   void playClick();
 
   TaskHandle_t audioTask;
@@ -202,13 +205,18 @@ bool AudioPlayer::OnAudioPlayerThread() {
 bool AudioPlayer::sendMessage(QueueHandle_t queue, AudioMessage *message) {
   bool success = false;
 
-  BaseType_t ret = xQueueSend(queue, message, portMAX_DELAY);
-  if (ret == pdTRUE) {
-    success = true;
+  if (queue) {
+    BaseType_t ret = xQueueSend(queue, message, portMAX_DELAY);
+    if (ret == pdTRUE) {
+      success = true;
+    } else {
+      logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "Unable to send message. AudioThread: %s, message: %d\n", 
+        OnAudioPlayerThread() ? "True" : "False",
+        message->message);
+    }
   } else {
-    logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "Unable to send message. AudioThread: %s, message: %d\n", 
-      OnAudioPlayerThread() ? "True" : "False",
-      message->message);
+    // This can happen if the trigger is being hit during startup. 
+    logPrintf(LOG_COMP_AUDIO, LOG_SEV_WARN, "Attempt to send message to the audio component before the message queue has been initialized.\n")
   }
 
   return success;
@@ -314,30 +322,34 @@ void AudioPlayer::audioPlayerTask() {
 
   while (true) {
     switch(waitForMessage(&inMessage)) {
-      case AM_NoOp:
+    case AM_NoOp:
       // There were no messages in the queue. Allow the audio component to run, then
       // check again.
       break;
 
-      case AM_PlayFile:
+    case AM_PlayFile:
       playAudioFile(AmSingleTypeMessage<const char*>::As(inMessage.data));
       break;
 
-      case AM_SetClickFile:
+    case AM_SetClickFile:
       setClickFile(AmSingleTypeMessage<const char*>::As(inMessage.data));
       break;
 
-      case AM_StartClick:
+    case AM_StartClick:
       startClick(AmSingleTypeMessage<uint16_t>::As(inMessage.data));
       break;
 
-      case AM_PlayClick:
+    case AM_RestartClick:
+      restartClick(AmSingleTypeMessage<uint32_t>::As(inMessage.data));
+      break;
+
+    case AM_PlayClick:
       playClick();
       break;
 
-      default:
+    default:
         // Should not get here
-        logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: Unknown message: %d\n", inMessage.message);
+        logPrintf(LOG_COMP_AUDIO, LOG_SEV_ERROR, "AUDIO: BUG: Unknown message: %d\n", inMessage.message);
     }
 
     flasher.TurnOffAfterDelay();
@@ -461,15 +473,52 @@ bool AudioPlayer::StartClick(uint16_t bpm) {
 
 
 void AudioPlayer::startClick(uint16_t bpm) {
-  // Figure out the number of milliseconds between flashes
-  clickDelay = (((float)60) / bpm) * 1000;
-  lastClickPlayed = 0;
+  // If BPM is zero, then we're restarting the click *NOW* at the same speed.
+  // (This feature is used when out of sync with the click. It allows the user
+  // to hit a trigger to restart the click on the downbeat.)
+  if (bpm != 0) {
+    // Figure out the number of milliseconds between flashes
+    clickDelay = (((float)60) / bpm) * 1000;
+    lastClickPlayed = 0;
+  }
 
   AmSingleTypeMessage<bool> retMessage(true);
   AudioMessage audioMessage(AM_StartClick, &retMessage);
   sendMessage(outMessages, &audioMessage);
 }
 
+
+bool AudioPlayer::RestartClick(uint32_t startTime) {
+  bool success = false;
+
+  if (startTime == 0) {
+    startTime = millis();
+  }
+
+  AmSingleTypeMessage<uint32_t> message(startTime);
+  AudioMessage send(AM_RestartClick, &message);
+  if (sendMessage(inMessages, &send)) {
+    logPrintf(LOG_COMP_AUDIO, LOG_SEV_VERBOSE, "AUDIO: Sent RetartClick message. Waiting for response...\n");
+
+    AudioMessage response;
+    if (receiveMessageFromAudioThread(AM_RestartClick, &response)) {
+      logPrintf(LOG_COMP_AUDIO, LOG_SEV_VERBOSE, "AUDIO: RetartClick message response received.\n");
+      success = true;
+    }
+  }
+
+  return success;
+}
+
+
+void AudioPlayer::restartClick(uint32_t startTime) {
+  lastClickPlayed = startTime;
+  clickOn = true;
+
+  AmSingleTypeMessage<bool> retMessage(true);
+  AudioMessage audioMessage(AM_RestartClick, &retMessage);
+  sendMessage(outMessages, &audioMessage);
+}
 
 
 AudioPlayer audioPlayer;
@@ -499,9 +548,8 @@ bool AudioComp::StartClick(uint16_t bpm) {
 }
 
 
-bool AudioComp::StartClick() {
-  audioPlayer.StartClick();
-  return true;
+bool AudioComp::RestartClick(uint32_t startTime) {
+  return audioPlayer.RestartClick(startTime);
 }
 
 
