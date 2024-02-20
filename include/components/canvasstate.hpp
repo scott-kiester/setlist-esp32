@@ -27,12 +27,15 @@ public:
 
   uint8_t textSize;
   uint16_t textPadding;
+  bool textWrap;
   uint32_t fgColor;
   uint32_t bgColor;
   uint8_t datum;
 
   const GFXfont *freeFont;
   uint8_t textFont;
+
+  bool visible;
 };
 
 #endif

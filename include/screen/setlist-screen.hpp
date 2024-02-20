@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include "components/componentpanel.hpp"
+#include "components/componentselector.hpp"
 #include "components/gridlistbox.hpp"
 #include "components/nextprevbuttons.hpp"
 #include "components/textbox.hpp"
@@ -11,9 +13,9 @@
 #include "serializable/songs.hpp"
 
 
+class SwapGridButton;
 class VolumeUpButton;
 class VolumeDownButton;
-class MetronomeButton;
 
 class LightOnOffButton;
 class ClickOnOffButton;
@@ -26,12 +28,14 @@ public:
   SetlistSong();
   virtual ~SetlistSong() {}
 
-  bool SetSong(const Serializable::Song *_song);
+  bool SetSong(const Serializable::Song *_song, const Serializable::SetlistSong *_setlistSong);
   const Serializable::Song* GetSong() const { return song; }
+  const Serializable::SetlistSong* GetSetlistSong() const { return setlistSong; }
   const std::string& GetBPM() const { return bpm; }
 
 private:
   const Serializable::Song *song;
+  const Serializable::SetlistSong *setlistSong;
   std::string bpm;
 };
 
@@ -58,13 +62,22 @@ public:
   uint16_t GetTempo() { return curTempo; }
   void SetTempo(uint16_t newTempo);
 
+  bool SwapGridArea();
+
   static SetlistScreen* GetSetlistScreen();
 
 private:
   void initSongGrid(uint16_t firstSongIdx);
   void selectionChanged();
 
+  ComponentSelector *mainComp;
   GridListBox *setListBox;
+  SwapGridButton *swapGridButton;
+
+  ComponentPanel *songDetailPanel;
+  TextBox *songDetailTitle;
+  TextBox *songDetailNotes;
+
   NextPrevButtons *nextPrevButtons;
 
   TextBox *volTextbox;

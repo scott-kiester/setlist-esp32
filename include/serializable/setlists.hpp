@@ -15,21 +15,47 @@ namespace Serializable {
           {
             "name": "Scera",
             songs: [
-              "Song name",
-              "Song 2"
+              {
+                "name": "Song name"
+              },
+              {
+                "name: "Song 2",
+                "notes": "These are the song 2 notes."
             ],
             "name": "Christmas Show",
             songs: [
-              "Song 2",
-              "Song name",
-              "Another Song"
+              {
+                "name": "Song 2"
+              },
+              {
+                "name": "Song name"
+              },
+              {
+                "name: "Another Song"
+              }
             ]
           }
         ]
       }
   */
 
-typedef std::list<std::string> SetlistSongs;
+class SetlistSong : public SerializableObject {
+public:
+  SetlistSong() {}
+  virtual ~SetlistSong() {}
+
+  const std::string& GetName() const { return name; }
+  const std::string& GetNotes() const { return notes; }
+
+  virtual bool DeserializeSelf(const ArduinoJson::JsonObject& obj);
+
+private:
+  std::string name;
+  std::string notes;
+};
+
+
+typedef std::list<SetlistSong*> SetlistSongs;
 
 class Setlist : public SerializableObject {
 public:

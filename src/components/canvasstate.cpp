@@ -17,6 +17,9 @@ CanvasState::CanvasState(bool _applyOnDestruction):
 
   freeFont = tft->getGfxFont();
   textFont = tft->textfont;
+
+  textWrap = false;
+  visible = true;
 }
 
 
@@ -31,6 +34,8 @@ CanvasState::CanvasState(CanvasState& canvasState) {
   datum = canvasState.datum;
   freeFont = canvasState.freeFont;
   textFont = canvasState.textFont;
+  textWrap = canvasState.textWrap;
+  visible = canvasState.visible;
 }
 
 
@@ -50,6 +55,7 @@ void CanvasState::Apply() {
   tft->setTextPadding(textPadding);
   tft->setTextColor(fgColor, bgColor);
   tft->setTextDatum(datum);
+  tft->setTextWrap(textWrap);
 
   tft->setTextFont(textFont);
 

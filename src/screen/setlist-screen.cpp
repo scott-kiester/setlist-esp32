@@ -11,24 +11,27 @@
 #define SONGS_MAX_SIZE (32 * 1024)
 
 #define BOTTOM_ROW_NUM_ITEMS 4
-#define BOTTOM_ROW_HEIGHT 75
+#define BOTTOM_ROW_HEIGHT 50
 #define BOTTOM_ROW_WIDTH TftManager::Width()
 #define BOTTOM_ROW_ITEM_WIDTH (BOTTOM_ROW_WIDTH / BOTTOM_ROW_NUM_ITEMS)
 
-#define RIGHT_COLUMN_WIDTH 100
-#define RIGHT_COLUMN_NUM_ITEMS 3
+#define RIGHT_COLUMN_WIDTH 75
+#define RIGHT_COLUMN_NUM_ITEMS 4
 
 #define RIGHT_COLUMN_ITEM_HEIGHT ((TftManager::Height() - BOTTOM_ROW_HEIGHT)  / RIGHT_COLUMN_NUM_ITEMS)
 
+#define SWAP_GRID_BUTTON_HEIGHT RIGHT_COLUMN_ITEM_HEIGHT
 #define VOL_UP_BUTTON_HEIGHT RIGHT_COLUMN_ITEM_HEIGHT
 #define VOL_DOWN_BUTTON_HEIGHT RIGHT_COLUMN_ITEM_HEIGHT
 #define METRONOME_BUTTON_HEIGHT RIGHT_COLUMN_ITEM_HEIGHT
 
-#define SET_LIST_MAX_ROWS 10
+#define SET_LIST_MAX_ROWS 11
 #define SET_LIST_WIDTH (TftManager::Width() - RIGHT_COLUMN_WIDTH)
 #define SET_LIST_HEIGHT (TftManager::Height() - BOTTOM_ROW_HEIGHT)
 #define SET_LIST_MAX_NAME_LEN 40
 #define SET_LIST_MAX_BPM_LEN 3
+
+#define SONG_DETAIL_TITLE_HEIGHT 50
 
 #define VOLUME_CHANGE 0.05
 
@@ -39,9 +42,10 @@ SetlistSong::SetlistSong():
   song(NULL) {}
 
 
-bool SetlistSong::SetSong(const Serializable::Song *_song) {
+bool SetlistSong::SetSong(const Serializable::Song *_song, const Serializable::SetlistSong *_setlistSong) {
   try {
     song = _song;
+    setlistSong = _setlistSong;
     bpm = std::to_string(_song->GetBPM());
     logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "SetlistSong::SetSong: song: %s, BPM: %s\n", song->GetName().c_str(), bpm.c_str());
     return true;
@@ -50,6 +54,36 @@ bool SetlistSong::SetSong(const Serializable::Song *_song) {
     return false;
   }
 }
+
+
+#define SWAP_GRID_BUTTON_TEXT_GRID "List"
+#define SWAP_GRID_BUTTON_TEXT_SONG_DETAIL "Song"
+
+///////////////////////////////////////////////////////////////////////////////
+// class VolumeUpButton
+///////////////////////////////////////////////////////////////////////////////
+class SwapGridButton : public Button {
+public:
+  SwapGridButton(CanvasState& cs, uint16_t _width, uint16_t _height, SetlistScreen *_screen):
+    Button(cs, _width, _height, SWAP_GRID_BUTTON_TEXT_SONG_DETAIL),
+    screen(_screen) {}
+
+  virtual ~SwapGridButton() {}
+
+  virtual void OnPress() {
+    if (strcmp(GetText(), SWAP_GRID_BUTTON_TEXT_GRID) == 0) {
+      SetText(SWAP_GRID_BUTTON_TEXT_SONG_DETAIL);
+    } else {
+      SetText(SWAP_GRID_BUTTON_TEXT_GRID);
+    }
+
+    // This will call ManualDraw(), which is why we change the text first
+    screen->SwapGridArea();
+  }
+
+private:
+  SetlistScreen *screen;
+};
 
 
 
@@ -202,7 +236,12 @@ private:
 // class SetlistScreen
 ///////////////////////////////////////////////////////////////////////////////
 SetlistScreen::SetlistScreen():
+  mainComp(NULL),
   setListBox(NULL),
+  swapGridButton(NULL),
+  songDetailPanel(NULL),
+  songDetailTitle(NULL),
+  songDetailNotes(NULL),
   nextPrevButtons(NULL),
   volTextbox(NULL),
   volUpButton(NULL),
@@ -245,19 +284,20 @@ void SetlistScreen::Show() {
 
   try {
     // Set up a vector with all the songs for quick and easy access
-    for (const std::string &setlistSong : setlist->GetSongs()) {
-      logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Setlist song: %s\n", setlistSong.c_str());
+    for (const Serializable::SetlistSong *serSetlistSong : setlist->GetSongs()) {
+      const std::string& songName = serSetlistSong->GetName();
+      logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Setlist song: %s\n", songName.c_str());
 
       bool found = false;
       for (const Serializable::Song* song : allSongs.GetSongs()) {
-        if (setlistSong.compare(song->GetName()) == 0) {
+        if (songName.compare(song->GetName()) == 0) {
           SetlistSong *setlistSong = new SetlistSong();
           if (!setlistSong) {
-            logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "Unable to allocate SetlistSong for song: %s\n", song->GetName().c_str());
+            logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "Unable to allocate SetlistSong for song: %s\n", songName.c_str());
             return;
           }
 
-          setlistSong->SetSong(song);
+          setlistSong->SetSong(song, serSetlistSong);
           setlistSongs.push_back(setlistSong);
 
           found = true;
@@ -266,11 +306,18 @@ void SetlistScreen::Show() {
       }
 
       if (!found) {
-        logPrintf(LOG_COMP_SCREEN, LOG_SEV_WARN, "SetlistScreen: Song \"%s\" not found in master song list\n", setlistSong.c_str());
+        logPrintf(LOG_COMP_SCREEN, LOG_SEV_WARN, "SetlistScreen: Song \"%s\" not found in master song list\n", serSetlistSong->GetName().c_str());
       }
     }
   } catch (std::bad_alloc&) {
     logLn(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "SetlistScreen: Out of memory building song list");
+    return;
+  }
+
+  // The ComponentSelector will allow us to switch between the grid list and the detailed song view.
+  mainComp = new ComponentSelector();
+  if (!mainComp || !pushComponent(reinterpret_cast<Component**>(&mainComp))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to create and push resource for mainComp\n");
     return;
   }
 
@@ -296,6 +343,44 @@ void SetlistScreen::Show() {
     logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc columns for setListBox\n");
     return;
   }
+
+  // Since we've called pushComponent on setListBox, it will be deallocated when this screen is hidden.
+  mainComp->AddComponent(setListBox);
+  mainComp->SetSelectedComponent(setListBox);
+
+  // Add the song detail screen, to be switched out with the grid list box.
+  songDetailPanel = new ComponentPanel(cs, SET_LIST_WIDTH, SET_LIST_HEIGHT);
+  if (!songDetailPanel || !pushComponent(reinterpret_cast<Component**>(&songDetailPanel))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc columns for songDetailPanel\n");
+    return;
+  }
+
+  songDetailPanel->Init();
+
+  cs.freeFont = FF22;
+  songDetailTitle = new TextBox(cs, SET_LIST_WIDTH, SONG_DETAIL_TITLE_HEIGHT);
+  if (!songDetailTitle || !pushComponent(reinterpret_cast<Component**>(&songDetailTitle))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc columns for songDetailTitle\n");
+    return;
+  }
+
+  songDetailTitle->Init();
+  songDetailPanel->AddComponent(songDetailTitle);
+  mainComp->AddComponent(songDetailPanel);
+
+  cs.cursorY = SONG_DETAIL_TITLE_HEIGHT;
+  cs.textWrap = true;
+  cs.freeFont = FF17;
+  songDetailNotes = new TextBox(cs, SET_LIST_WIDTH, SET_LIST_HEIGHT - SONG_DETAIL_TITLE_HEIGHT);
+  if (!songDetailNotes || !pushComponent(reinterpret_cast<Component**>(&songDetailNotes))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc columns for songDetailNotes\n");
+    return;
+  }
+
+  cs.textWrap = false;
+
+  songDetailNotes->Init();
+  songDetailPanel->AddComponent(songDetailNotes);
 
   nextPageIdx = 0;
   initSongGrid(nextPageIdx);
@@ -330,11 +415,19 @@ void SetlistScreen::Show() {
   }
 
   tempoTextBox->Init();
-
-  // Mulitply the volume by 100 so it's not a decimal. Also make sure we don't print a floating point number. 
-  tempoTextBox->SetText(std::string("Tempo: "));
+  //tempoTextBox->SetText(std::string("Tmpo: "));
 
   cs.cursorY += RIGHT_COLUMN_ITEM_HEIGHT / 2;
+  swapGridButton = new SwapGridButton(cs, RIGHT_COLUMN_WIDTH, RIGHT_COLUMN_ITEM_HEIGHT, this);
+  if (!swapGridButton || !pushComponent(reinterpret_cast<Component**>(&swapGridButton))) {
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc columns for swapGridButton\n");
+    return;
+  }
+
+  swapGridButton->SetColors(TFT_WHITE, TFT_BLUE);
+  swapGridButton->Init();
+
+  cs.cursorY += RIGHT_COLUMN_ITEM_HEIGHT;
   volUpButton = new VolumeUpButton(cs, RIGHT_COLUMN_WIDTH, RIGHT_COLUMN_ITEM_HEIGHT, volTextbox);
   if (!volUpButton || !pushComponent(reinterpret_cast<Component**>(&volUpButton))) {
     logPrintf(LOG_COMP_SCREEN, LOG_SEV_ERROR, "****** OUT OF MEMORY ******* Unable to alloc volUpButton\n");
@@ -401,6 +494,7 @@ void SetlistScreen::Show() {
   tempoUpButton->Init();
 
 
+  selectionChanged();
   Component::ManualDraw();
 }
 
@@ -500,9 +594,21 @@ void SetlistScreen::selectionChanged() {
     selection, songStartIndex, setlistSongs.size());
 
   SetlistSong *selectedSong = setlistSongs[songStartIndex + selection];
+  logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "selectionChanged: name: %s, notes: %s\n", 
+    selectedSong->GetSong()->GetName(), selectedSong->GetSetlistSong()->GetNotes());
+
   curTempo = selectedSong->GetSong()->GetBPM();
   AudioComp::StartClick(curTempo);
-  tempoTextBox->Update(std::string("Tempo: ").append(std::to_string(curTempo)));
+  //tempoTextBox->Update(std::string("Tempo: ").append(std::to_string(curTempo)));
+  tempoTextBox->Update(std::to_string(curTempo));
+
+  logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Setting songDetailTitle to %s\n", selectedSong->GetSong()->GetName().c_str());
+  songDetailTitle->SetText(selectedSong->GetSong()->GetName());
+  songDetailNotes->SetText(selectedSong->GetSetlistSong()->GetNotes());
+
+  // There probably should be an "Update" method in Component for this, but for now I'm doing it the hard way.
+  songDetailPanel->ClearComponent();
+  songDetailPanel->Draw();
 }
 
 
@@ -532,6 +638,18 @@ bool SetlistScreen::SelectPrevItem() {
 }
 
 
+bool SetlistScreen::SwapGridArea() {
+  if (mainComp->GetSelectedComponent() == setListBox) {
+    mainComp->SetSelectedComponent(songDetailPanel);
+  } else {
+    mainComp->SetSelectedComponent(setListBox);
+  }
+
+  Component::ManualDraw();
+  return true;
+}
+
+
 void SetlistScreen::SetTempo(uint16_t newTempo) {
   if (newTempo > 300) {
     return;
@@ -539,5 +657,6 @@ void SetlistScreen::SetTempo(uint16_t newTempo) {
 
   curTempo = newTempo;
   AudioComp::StartClick(curTempo);
-  tempoTextBox->Update(std::string("Tempo: ").append(std::to_string(curTempo)));
+  //tempoTextBox->Update(std::string("Tempo: ").append(std::to_string(curTempo)));
+  tempoTextBox->Update(std::to_string(curTempo));
 }

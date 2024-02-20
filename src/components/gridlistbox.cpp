@@ -213,6 +213,10 @@ const char* GridListBox::GetSelectedCellData(uint8_t colNum) {
 
 
 void GridListBox::printRow(uint8_t row, bool changeFont) {
+  if (!ourCanvasState.visible) {
+    return;
+  }
+  
   TFT_eSPI *tft = TftManager::GetTft();
 
   uint16_t bgColor = TFT_BLACK;

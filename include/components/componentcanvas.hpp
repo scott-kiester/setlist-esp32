@@ -12,6 +12,9 @@ public:
 
   virtual ~ComponentCanvas() {}
 
+  void ClearComponent(uint16_t width, uint16_t height);
+  virtual void SetVisible(bool _visible) { ourCanvasState.visible = _visible; }
+
 protected:
   CanvasState ourCanvasState;
 };

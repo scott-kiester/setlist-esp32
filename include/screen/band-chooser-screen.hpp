@@ -1,10 +1,10 @@
 #ifndef __BAND_CHOOSER_SCREEN_HPP___
 #define __BAND_CHOOSER_SCREEN_HPP___
 
-#include <components/gridlistbox.hpp>
-#include <components/nextprevbuttons.hpp>
-#include <screen/screen.hpp>
-#include <serializable/band-data.hpp>
+#include "components/gridlistbox.hpp"
+#include "components/nextprevbuttons.hpp"
+#include "screen/screen.hpp"
+#include "serializable/band-data.hpp"
 
 namespace BandChooserScreenLocal {
   class GoButton;

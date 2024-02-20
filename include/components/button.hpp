@@ -25,6 +25,11 @@ public:
   // user to toggle the flash by just touching the screen.
   void ManualState(bool pressed);
 
+  const char *GetText() const { return text; }
+
+  // Caller's responsibilty to ensure pointer stays in scope
+  void SetText(const char *_text) {text = _text; }
+
 private:
   void handlePress();
 

@@ -14,7 +14,6 @@ TextBox::TextBox(CanvasState& canvasState, uint16_t _height):
   width(0),
   height(0) {
     ourCanvasState.datum = TL_DATUM;
-    ourCanvasState.cursorY += reservedHeight / 2; // Draw in the middle of the specified area
 }
 
 TextBox::TextBox(CanvasState& canvasState, uint16_t _width, uint16_t _height):
@@ -24,7 +23,6 @@ TextBox::TextBox(CanvasState& canvasState, uint16_t _width, uint16_t _height):
   width(_width),
   height(_height) {
     ourCanvasState.datum = TL_DATUM;
-    ourCanvasState.cursorY += reservedHeight / 2; // Draw in the middle of the specified area
 }
 
 
@@ -76,8 +74,6 @@ void TextBox::Draw() {
     fillWidth = tft->textWidth(text.c_str()) + tft->getTextPadding();
     fillHeight = tft->fontHeight();
 
-    // It seems that Y is below where the text is actually written. WTF? Clearly I'm misunderstanding something.
-    // (Does this have something to do with reservedHeight above? That looks weird... I'd love to know what I was thinking when I wrote that.)
     fillY = ourCanvasState.cursorY;
     if (fillY >= tft->fontHeight()) {
       fillY -= tft->fontHeight();
@@ -94,7 +90,23 @@ void TextBox::Draw() {
   }
 
   tft->fillRect(fillX, fillY, fillWidth, fillHeight, ourCanvasState.bgColor);
+
+  if (ourCanvasState.textWrap) {
+    // Text wraps inside the viewport
+    // (I could probably take better advatage of the viewport feature. I didn't notice it until now.)
+    tft->setViewport(ourCanvasState.cursorX, ourCanvasState.cursorY, width, height);
+
+    // Begin writing in the middle (vertical) of the first line.
+    logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Textbox: text wraps. cursorY: %d, tft->fontHeight() / 2: %d\n", 
+      ourCanvasState.cursorY, tft->fontHeight() / 2);
+    tft->setCursor(0, tft->fontHeight() / 2);
+  } else {
+    // Begin writing in the center, rather than at the top
+    tft->setCursor(ourCanvasState.cursorX, ourCanvasState.cursorY + reservedHeight / 2);
+  }
+
   tft->print(text.c_str());
+  tft->resetViewport();
 
   logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "Textbox filled background rect with color: %d, X: %d, Y: %d, Width: %d, Height: %d\n",
     ourCanvasState.bgColor, fillX, fillY, fillWidth, fillHeight);

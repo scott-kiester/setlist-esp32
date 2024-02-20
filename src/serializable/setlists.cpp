@@ -4,6 +4,25 @@
 namespace Serializable {
 
 ///////////////////////////////////////////////////////////////////////////////
+// SetlistSong
+///////////////////////////////////////////////////////////////////////////////
+bool SetlistSong::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
+  try {
+    name = obj["name"].as<const char*>();
+    const char* strNotes = obj["notes"].as<const char*>();
+    if (strNotes) {
+      notes = strNotes;
+    }
+    
+    return true;
+  } catch (std::bad_alloc&) {
+    logLn(LOG_COMP_SERIALIZE, LOG_SEV_ERROR, "Out of memory copying setlist data");
+    return false;
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
 // Setlist
 ///////////////////////////////////////////////////////////////////////////////
 bool Setlist::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
@@ -11,8 +30,19 @@ bool Setlist::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
     name = obj["name"].as<const char*>();
 
     ArduinoJson::JsonArray jsonSongs = obj["songs"].as<ArduinoJson::JsonArray>();
-    for (ArduinoJson::JsonVariant v : jsonSongs) {
-      setlistSongs.push_back(v.as<std::string>());
+    for (ArduinoJson::JsonObject obj : jsonSongs) {
+      SetlistSong *setlistSong = new SetlistSong();
+      if (!setlistSong)  {
+        logLn(LOG_COMP_SERIALIZE, LOG_SEV_ERROR, "Unable to allocate SetlistSong object during deserialization");
+        return false;
+      }
+
+      if (setlistSong->DeserializeSelf(obj)) {
+        setlistSongs.push_back(setlistSong);
+      } else {
+          delete setlistSong;
+          logLn(LOG_COMP_SERIALIZE, LOG_SEV_ERROR, "Failed to deserialize setlistSong");
+      }
     }
     
   } catch (std::bad_alloc&) {

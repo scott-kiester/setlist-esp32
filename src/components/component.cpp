@@ -19,6 +19,13 @@ void Component::ClearComponentList() {
 }
 
 
+void Component::MakeSelectable() {
+  // Remove the component from the draw list, since the ComponentSelector will be
+  // proxying the events.
+  components.remove(this);
+}
+
+
 void Component::ManualDraw() {
   TftManager::GetTft()->fillScreen(TFT_BLACK);
   for (ComponentList::iterator it = components.begin(); it != components.end(); ++it) {

@@ -16,9 +16,14 @@ public:
   virtual void Run(TSPoint *p) {}
   virtual void Draw() {}
 
+  virtual void SetVisible(bool _visible) {}
+
   // Same as Draw(), but only for a single component. The component may
   // need to clear its background first.
   virtual void Redraw() {}
+
+  // To be called by ComponentSelector when it takes over management of a component.
+  void MakeSelectable();
 
   static void ManualDraw();
   static void Loop();
