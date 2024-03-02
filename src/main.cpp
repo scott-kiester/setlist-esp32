@@ -4,6 +4,7 @@
 #include "audio.hpp"
 #include "components/component.hpp"
 #include "log.hpp"
+#include "network/wifi.hpp"
 #include "screen/band-chooser-screen.hpp"
 #include "screen/setlist-screen.hpp"
 #include "storage/sdcard.hpp"
@@ -13,6 +14,8 @@
 
 /* For TFT_eSPI, below should be the contents of user_setup.h. PlatforIO
    helpfully nukes it every time it does a clean build.
+
+   TODO: Add a build script to take care of this. It's now bitten me several times.
 
 #define ILI9486_DRIVER
 
@@ -135,11 +138,10 @@ void loop(void *) {
 }
 
 
-//void setup() {
 extern "C" void app_main() {
   Serial.begin(115200);
 
-  Serial.println(F("Set List (Bluetooth) starting..."));
+  Serial.println(F("Set List starting..."));
 
   logFlags = LOG_COMP_ALL; //LOG_COMP_BLUETOOTH | LOG_COMP_SCREEN | LOG_COMP_GRID | LOG_COMP_SDCARD;
   logSeverity = LOG_SEV_VERBOSE;
@@ -153,6 +155,10 @@ extern "C" void app_main() {
   TftManager::Init();
   SDCard::Init();
   AudioComp::Init();
+
+  // Temporarily moving this to band-chooser-screen since, in an abundence of foresight, I neglected to
+  // expose the reset button, and I'd like to actually see the serial output from this call. 
+  //Net::Init();
 
   TftManager::Calibrate();
 

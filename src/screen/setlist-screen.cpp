@@ -3,6 +3,7 @@
 #include "components/button.hpp"
 #include "Free_Fonts.h"
 #include "log.hpp"
+#include "network/wifi.hpp"
 #include "screen/setlist-screen.hpp"
 #include "tftmanager.hpp"
 
@@ -613,6 +614,13 @@ void SetlistScreen::selectionChanged() {
 
 
 bool SetlistScreen::SelectNextItem() {
+  // TODO: Remove! This is here for debugging only, to delay the trace statements
+  // until I press on the screen.
+  static bool wifiInitialized = false;
+  if (!wifiInitialized) {
+    Net::Init();
+  }
+
   bool ret = setListBox->SelectNextItem();
   if (ret) {
     selectionChanged();

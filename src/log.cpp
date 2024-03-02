@@ -71,6 +71,10 @@ void logvPrintf(const char* str, ...) {
           Serial.print(va_arg(args, int));
           break;
 
+        case 'x':
+          Serial.printf("%x", va_arg(args, unsigned));
+          break;
+
         case 'u': 
           Serial.print(va_arg(args, unsigned));
           break;

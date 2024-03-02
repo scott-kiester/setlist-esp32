@@ -33,9 +33,7 @@ bool BandData::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
 // BandList
 ///////////////////////////////////////////////////////////////////////////////
 BandList::~BandList() {
-  for (Bands::iterator it = bands.begin(); it != bands.end(); ++it) {
-    BandData *bandData = *it;
-    bands.erase(it);
+  for (BandData *bandData : bands) {
     if (bandData) {
       delete bandData;
     }

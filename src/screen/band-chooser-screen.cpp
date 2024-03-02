@@ -3,6 +3,7 @@
 #include "log.hpp"
 #include "screen/band-chooser-screen.hpp"
 #include "screen/set-chooser-screen.hpp"
+#include "network/wifi.hpp"
 
 #define BAND_DATA_FILEPATH SDCARD_ROOT"/band-data.json"
 #define BAND_DATA_FILE_MAXSIZE 1024

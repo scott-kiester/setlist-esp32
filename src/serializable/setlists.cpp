@@ -8,18 +8,29 @@ namespace Serializable {
 ///////////////////////////////////////////////////////////////////////////////
 bool SetlistSong::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
   try {
-    name = obj["name"].as<const char*>();
-    const char* strNotes = obj["notes"].as<const char*>();
+    const char *strName = obj["name"].as<const char*>();
+    if (!strName) {
+      logLn(LOG_COMP_SERIALIZE, LOG_SEV_ERROR, "Name field is missing from SetlistSong");
+
+      // This entry is no good, but others might be. Keep going.
+      return true;
+    }
+
+    name = strName;
+
+    // Notes are optional
+    const char *strNotes = obj["notes"].as<const char*>();
     if (strNotes) {
       notes = strNotes;
     }
-    
-    return true;
   } catch (std::bad_alloc&) {
     logLn(LOG_COMP_SERIALIZE, LOG_SEV_ERROR, "Out of memory copying setlist data");
     return false;
   }
+
+  return true;
 }
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -54,15 +65,14 @@ bool Setlist::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
 }
 
 
+
 ///////////////////////////////////////////////////////////////////////////////
 // Setlists
 ///////////////////////////////////////////////////////////////////////////////
 Setlists::~Setlists() {
-  while (sets.size() > 0) {
-    Setlist *setlist = sets.back();
-    sets.pop_back();
-    if (setlist) {
-      delete setlist;
+  for (Setlist *setList : sets) {
+    if (setList) {
+      delete setList;
     }
   }
 }
