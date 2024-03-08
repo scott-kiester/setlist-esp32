@@ -248,14 +248,13 @@ void AudioPlayer::Init() {
   inMessages = xQueueCreate(10, sizeof(AudioMessage));
   outMessages = xQueueCreate(10, sizeof(AudioMessage));
 
-  BaseType_t ret = xTaskCreatePinnedToCore(
+  BaseType_t ret = xTaskCreate(
     AudioPlayer::audioPlayerTaskInit,
     "AudioPlayer",
-    5000, 
+    4096, 
     this,
     2 | portPRIVILEGE_BIT,
-    &audioTask,
-    1);
+    &audioTask);
 
   if (ret == pdPASS) {
     logPrintf(LOG_COMP_AUDIO, LOG_SEV_INFO, "Audio: Created task: %d\n", audioTask);

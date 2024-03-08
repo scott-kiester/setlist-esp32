@@ -4,6 +4,7 @@
 #include "audio.hpp"
 #include "components/component.hpp"
 #include "log.hpp"
+#include "network/remoteconfig.hpp"
 #include "network/wifi.hpp"
 #include "screen/band-chooser-screen.hpp"
 #include "screen/setlist-screen.hpp"
@@ -159,6 +160,8 @@ extern "C" void app_main() {
   // Temporarily moving this to band-chooser-screen since, in an abundence of foresight, I neglected to
   // expose the reset button, and I'd like to actually see the serial output from this call. 
   //Net::Init();
+  // Same for this
+  //RemoteConfig::Init();
 
   TftManager::Calibrate();
 

@@ -30,9 +30,7 @@ bool Song::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
 // SongList
 ///////////////////////////////////////////////////////////////////////////////
 SongList::~SongList() {
-  for (Songs::iterator it = songs.begin(); it != songs.end(); ++it) {
-    Song *song = *it;
-    songs.erase(it);
+  for (Song *song : songs) {
     if (song) {
       delete song;
     }

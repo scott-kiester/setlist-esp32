@@ -6,7 +6,6 @@
 #include "network/wifi.hpp"
 
 #define BAND_DATA_FILEPATH SDCARD_ROOT"/band-data.json"
-#define BAND_DATA_FILE_MAXSIZE 1024
 
 #define GO_BUTTON_HEIGHT (TftManager::Height())
 #define GO_BUTTON_WIDTH 50

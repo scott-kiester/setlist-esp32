@@ -25,7 +25,7 @@
 
 SDCard *sdCard = NULL;
 
-void listDir(const char * dirName){
+void listDir(const char *dirName){
   logPrintf(LOG_COMP_SDCARD, LOG_SEV_VERBOSE, "Listing directory: %s\n", dirName);
 
   DIR *dp = opendir(dirName);

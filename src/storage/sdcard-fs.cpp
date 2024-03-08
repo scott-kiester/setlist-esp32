@@ -14,9 +14,9 @@ SdCardFile::SdCardFile(FILE *theFile, const char *strFilename):
 
 
 SdCardFile::~SdCardFile() {
-  //if (file) {
-  //  fclose(file);
-  //}
+  if (file) {
+    fclose(file);
+  }
 }
 
 
@@ -66,6 +66,7 @@ bool SdCardFile::setBufferSize(size_t size) { return true; }
 void SdCardFile::close() {
   if(file) {
     fclose(file);
+    file = NULL;
   }
 }
 
@@ -220,7 +221,7 @@ bool SdCardFs::rmdir(const char *path) {
 
 void mountpoint(const char *) {
   // Not implemented. Probably needs to be if it ever gets called.
-  logPrintf(LOG_COMP_SDCARD, LOG_SEV_ERROR, "*** SdCardFile::openNextFile() NOT IMPLEMENTED.\n");
+  logPrintf(LOG_COMP_SDCARD, LOG_SEV_ERROR, "*** SdCardFile::configEvent(const char*) NOT IMPLEMENTED.\n");
   DC_ASSERT(false);
 }
 

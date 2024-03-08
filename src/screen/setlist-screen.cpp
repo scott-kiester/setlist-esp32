@@ -3,13 +3,11 @@
 #include "components/button.hpp"
 #include "Free_Fonts.h"
 #include "log.hpp"
+#include "network/remoteconfig.hpp"
 #include "network/wifi.hpp"
 #include "screen/setlist-screen.hpp"
 #include "tftmanager.hpp"
 
-
-#define SONGS_FILE_PATH SDCARD_ROOT"/songs.json"
-#define SONGS_MAX_SIZE (32 * 1024)
 
 #define BOTTOM_ROW_NUM_ITEMS 4
 #define BOTTOM_ROW_HEIGHT 50
@@ -596,7 +594,7 @@ void SetlistScreen::selectionChanged() {
 
   SetlistSong *selectedSong = setlistSongs[songStartIndex + selection];
   logPrintf(LOG_COMP_SCREEN, LOG_SEV_VERBOSE, "selectionChanged: name: %s, notes: %s\n", 
-    selectedSong->GetSong()->GetName(), selectedSong->GetSetlistSong()->GetNotes());
+    selectedSong->GetSong()->GetName().c_str(), selectedSong->GetSetlistSong()->GetNotes().c_str());
 
   curTempo = selectedSong->GetSong()->GetBPM();
   AudioComp::StartClick(curTempo);
@@ -619,6 +617,8 @@ bool SetlistScreen::SelectNextItem() {
   static bool wifiInitialized = false;
   if (!wifiInitialized) {
     Net::Init();
+    Net::RemoteConfig::Init();
+    //Net::RemoteConfig::GetRemoteConfig().DownloadAndApplyNewConfig();
   }
 
   bool ret = setListBox->SelectNextItem();

@@ -8,6 +8,9 @@
 
 #include "serializable/serializable-object.hpp"
 
+
+#define BAND_DATA_FILE_MAXSIZE (1024 * 2)
+
 namespace Serializable {
 
 /*

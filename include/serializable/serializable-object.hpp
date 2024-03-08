@@ -23,9 +23,6 @@ public:
   virtual bool DeserializeSelf(const ArduinoJson::JsonObject& obj) = 0;
 
 private:
-  bool deserializeFromBuffer(std::vector<char>& rawData, FILE *docFile, const char* filePath, size_t fileSize);
-
-private:
   ArduinoJson::DynamicJsonDocument* doc;
   bool valid;
 };

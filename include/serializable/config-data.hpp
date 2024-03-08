@@ -1,5 +1,5 @@
 #ifndef __CONFIG_DATA_HPP___
-#define __CONFIG__DATA_HPP___
+#define __CONFIG_DATA_HPP___
 
 #include <list>
 #include <string>
@@ -9,6 +9,9 @@
 #include "serializable/serializable-object.hpp"
 
 namespace Serializable {
+
+#define DEFAULT_CONFIG_CHECK_INTERVAL_SECONDS 60
+#define MAX_CONFIG_CHECK_INTERVAL_SECONDS (60 * 60)
 
 /*
   JSON format:
@@ -65,15 +68,21 @@ private:
 
 class ConfigData : public SerializableObject {
 public:
-  ConfigData() {}
+  ConfigData():
+    configCheckIntervalSeconds(DEFAULT_CONFIG_CHECK_INTERVAL_SECONDS) {}
+
   virtual ~ConfigData() {}
 
   const WifiData& GetWifiData() const { return wifiData; }
+  const std::string& GetDataUrl() const { return dataUrl; }
+  uint32_t GetConfigCheckIntervalSeconds() const { return configCheckIntervalSeconds; }
 
   virtual bool DeserializeSelf(const ArduinoJson::JsonObject& obj);
 
 private:
   WifiData wifiData;
+  std::string dataUrl;
+  uint32_t configCheckIntervalSeconds;
 };
 
 } // namespace Serializable

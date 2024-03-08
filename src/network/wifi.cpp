@@ -10,19 +10,21 @@
 #include "network/wifi.hpp"
 
 #define DEFAULT_SCAN_LIST_SIZE 50
-#define WIFI_CONNECTION_RETRY_SECONDS 10
+#define WIFI_CONNECTION_ESTABLISH_WAIT_SECONDS 15
+#define WIFI_CONNECTION_RETRY_SECONDS 5
 #define WIFI_CONNECTION_RETRY_MAX_SECONDS (60 * 5)
 
-#define WIFI_START_FAILURE_DELAY (60 * 60)
+#define WIFI_START_FAILURE_SECONDS 5
 
-#define WIFI_THREAD_NAME "WiFi Manager"
+#define WIFI_THREAD_NAME "WiFi Manager" // Max 16 bytes
 
-// Turns out there's already a WIFI_EVENT_CONNECTED somewhere. Go figure. What are the odds of
-// something else using such a common name?!
+// Turns out there's already a WIFI_EVENT_CONNECTED somewhere. Go figure.
+#define LOCAL_WIFI_EVENT_ALL          0xffffffff
 #define LOCAL_WIFI_EVENT_STA_START    0x00000001
 #define LOCAL_WIFI_EVENT_FAILED       0x00000002
 #define LOCAL_WIFI_EVENT_CONNECTED    0x00000004
 #define LOCAL_WIFI_EVENT_DISCONNECTED 0x00000008
+#define LOCAL_WIFI_EVENT_GOT_IP       0x00000010
 
 namespace Net {
 
@@ -123,13 +125,15 @@ class WiFi {
 private:
   WiFi():
     wifiEvent(NULL),
-    connected(false) {}
+    connected(false),
+    haveIp(false) {}
 
 public:
   virtual ~WiFi();
 
   bool Init();
   bool WaitForWiFiStart();
+  bool WaitForConnection(uint32_t maxWaitMs);
 
   static WiFi* GetWiFi();
 
@@ -147,6 +151,7 @@ private:
     EventGroupHandle_t wifiEvent;
 
     bool connected;
+    bool haveIp;
     std::string apSsid;
     std::string apPassword;
 };
@@ -174,12 +179,30 @@ bool WiFi::WaitForWiFiStart() {
   EventBits_t theBits = xEventGroupWaitBits(wifiEvent, LOCAL_WIFI_EVENT_STA_START, pdTRUE, pdFALSE, portMAX_DELAY);
   if (theBits & LOCAL_WIFI_EVENT_STA_START) {
     return true;
-  } else {
-    return false;
   }
+
+  return false;
 }
 
 
+bool WiFi::WaitForConnection(uint32_t maxWaitMs) {
+  if (connected && haveIp) {
+    return true;
+  } 
+
+  logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Waiting for network. Connected: %s, haveIp: %s\n",
+    connected ? "true" : "false",
+    haveIp ? "true" : "false")
+  EventBits_t theBits = xEventGroupWaitBits(wifiEvent, LOCAL_WIFI_EVENT_GOT_IP, pdTRUE, pdFALSE, maxWaitMs);
+  if (theBits & LOCAL_WIFI_EVENT_GOT_IP) {
+    return true;
+  }
+
+  return false;
+}
+
+
+// This should only be called from the Wifi Thread
 bool WiFi::connect() {
   logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "WiFi: Connecting...\n");
 
@@ -199,7 +222,7 @@ bool WiFi::connect() {
           ap.ssid, apSsid.c_str());
 
         // I'm not going to correct apSsid / apPassword here, because we shouldn't be here to begin with.
-        // How did they get out of sync? That problem needs to be understood and fixed.
+        // How did they get out of sync? If we're here, then that problem needs to be understood and fixed.
       }
       
       return true;
@@ -214,7 +237,7 @@ bool WiFi::connect() {
       logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "WiFi::connect() called with connect == true, but we're actually disconnected. Bug?\n");
     }
 
-    connected = false;
+    connected = haveIp = false;
   }
 
   try {
@@ -234,13 +257,13 @@ bool WiFi::connect() {
 
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "WiFi: Fetching config...\n");
     // List the networks and see if we're configured for any of them.
-    const Config *config = Config::GetConfig();
+    std::shared_ptr<const Config> config = Config::GetConfig();
     if (!config) {
       logPrintf(LOG_COMP_NET, LOG_SEV_ERROR, "WiFi::connect(): Config is NULL!\n");
       return false;
     }
 
-    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "WiFi: Fetcing AP list...\n");
+    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "WiFi: Fetching AP list...\n");
     const Serializable::ApList& apList = config->GetConfigData()->GetWifiData().GetApList();
 
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Listing SSIDs...\n");
@@ -287,7 +310,7 @@ bool WiFi::connect() {
         connected = true;
         apSsid = ap->GetSsid();
         apPassword = ap->GetPassword();
-        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Successfully connected to SSID %s!\n", ap->GetSsid().c_str());
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Successfully connected to SSID %s\n", ap->GetSsid().c_str());
         return true;
       } else {
         logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Connetion to SSID %s failed\n", ap->GetSsid().c_str());
@@ -332,7 +355,10 @@ bool WiFi::connectToAp(const std::string& ssid, const std::string& password) {
   // some point.
   wifiConfig.sta.sae_pwe_h2e = WPA3_SAE_PWE_HUNT_AND_PECK; 
 
-  esp_wifi_disconnect();
+  // Is it necessary to disconnect here? We wouldn't be here if we thought we were connected. What does the 
+  // implementation do if the connnection gets into a bad state, and then we re-connect to the same AP? Disconnecting
+  // would guarantee that any existing connections would be torn down, and that's not what we want.
+  //esp_wifi_disconnect();
 
   logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Attempting connection to SSID %s\n", ssid.c_str());
   esp_err_t ret = esp_wifi_set_config(WIFI_IF_STA, &wifiConfig);
@@ -343,7 +369,7 @@ bool WiFi::connectToAp(const std::string& ssid, const std::string& password) {
 
   ret = esp_wifi_connect();
   if (ret == ESP_OK) {
-    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Success returned from esp_wifi_connect");
+    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Success returned from esp_wifi_connect\n");
   } else {
     // Some errors here are expected, as not all of our configured APs will be in range all the time.
     logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Error from esp_wifi_connect: %d, SSID: %s\n", ret, ssid.c_str());
@@ -351,15 +377,17 @@ bool WiFi::connectToAp(const std::string& ssid, const std::string& password) {
   }
 
   // Wait until our callback is invoked.
-  EventBits_t event = xEventGroupWaitBits(wifiEvent, LOCAL_WIFI_EVENT_CONNECTED | LOCAL_WIFI_EVENT_FAILED, pdTRUE, pdFALSE, portMAX_DELAY);
-  if (event & LOCAL_WIFI_EVENT_CONNECTED) {
+  EventBits_t event = xEventGroupWaitBits(wifiEvent, LOCAL_WIFI_EVENT_GOT_IP | LOCAL_WIFI_EVENT_FAILED | LOCAL_WIFI_EVENT_DISCONNECTED, 
+    pdTRUE, pdFALSE, WIFI_CONNECTION_ESTABLISH_WAIT_SECONDS * 1000);
+
+  if (event & LOCAL_WIFI_EVENT_GOT_IP) {
     logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Connection successful! SSID: %s\n", ssid.c_str());
   } else {
     // Failure or timeout.
-    if (event & LOCAL_WIFI_EVENT_FAILED) {
-      logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "Failed to connect to SSID %s\n", ssid.c_str());
+    if (event & LOCAL_WIFI_EVENT_FAILED || event & LOCAL_WIFI_EVENT_DISCONNECTED) {
+      logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "Failed to connect to SSID %s. Event: 0x%x\n", ssid.c_str(), event);
     } else {
-      logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "Timed out connecting to SSID %s\n", ssid.c_str());
+      logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "Timed out connecting to SSID %s. Event bits: 0x%x\n", ssid.c_str(), event);
     }
 
     return false;
@@ -370,8 +398,7 @@ bool WiFi::connectToAp(const std::string& ssid, const std::string& password) {
 
 
 void WiFi::wifiThread() {
-
-  // Start up WiFi and wait for "started" event
+  // Start up WiFi and maintain the connection with our AP
   esp_err_t ret = 0;
   do {
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Calling esp_wifi_start()\n");
@@ -379,20 +406,41 @@ void WiFi::wifiThread() {
     if (ret != ESP_OK) {
       logPrintf(LOG_COMP_NET, LOG_SEV_ERROR, "Error from esp_wifi_start: %d\n", ret);
       // Whelp... Keep trying, I guess. Nothing to lose at this point.
-      delay(WIFI_START_FAILURE_DELAY);
+      delay(WIFI_START_FAILURE_SECONDS * 1000);
     }
   } while(ret != ESP_OK);
 
-
   logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Entering connected loop\n");
+  uint32_t retryDelay = WIFI_CONNECTION_RETRY_SECONDS;
   while (true) {
     if (!connected) {
       logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "wifiThread: Not connected. Attempting to connect...\n");
-      connect();
+      if (!connect()) {
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "wifiThread: Connection attempt failed. Waiting %d seconds before trying again.\n", retryDelay); 
+        delay(retryDelay * 1000);
+
+        // Wait twice as long next time, unless that exceeds the max.
+        retryDelay *= 2;
+        if (retryDelay > WIFI_CONNECTION_RETRY_MAX_SECONDS) {
+          retryDelay = WIFI_CONNECTION_RETRY_MAX_SECONDS;
+        }
+        
+        continue;
+      }
     }
 
-    // TODO: Change this to a wait on our event
-    delay(10000);
+    if (!connected) {
+      // WTF?
+      logPrintf(LOG_COMP_NET, LOG_SEV_WARN, "wifiThread: Connection appeared to be successful - just now - but we're no longer connected!\n");
+      continue;    
+    }
+
+    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "wifiThread: Waiting for event...\n");
+    retryDelay = WIFI_CONNECTION_RETRY_SECONDS;
+    EventBits_t bits = xEventGroupWaitBits(wifiEvent, LOCAL_WIFI_EVENT_DISCONNECTED, pdTRUE, pdFALSE, portMAX_DELAY);
+    // It doesn't matter why we stopped waiting. Either way we need to make sure we're connected and
+    // attempt to reconnect if necessary.
+    logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "wifiThread awake with event bits: 0x%x\n", bits);
   }
 }
 
@@ -407,55 +455,75 @@ void WiFi::eventHandler(esp_event_base_t eventBase, int32_t eventId, void *event
   if (eventBase == WIFI_EVENT) {
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Wifi::eventHandler: Got WiFi event 0x%x\n", eventId);
 
-    if (eventId & WIFI_EVENT_STA_START) {
-      setEvents |= LOCAL_WIFI_EVENT_STA_START;
-    }
+    switch(eventId) {
+      case WIFI_EVENT_STA_START:
+        setEvents |= LOCAL_WIFI_EVENT_STA_START;
+        break;
 
-    if (eventId & WIFI_EVENT_STA_CONNECTED) {
-      setEvents |= LOCAL_WIFI_EVENT_CONNECTED;
-    }
+      case WIFI_EVENT_STA_CONNECTED:
+        setEvents |= LOCAL_WIFI_EVENT_CONNECTED;
+        break;
 
-    if(eventId & WIFI_EVENT_STA_DISCONNECTED) {
-      setEvents |= LOCAL_WIFI_EVENT_DISCONNECTED;
-      connected = false;
-      logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "WiFi received disconnect event\n");
+      case WIFI_EVENT_STA_DISCONNECTED:
+        setEvents |= LOCAL_WIFI_EVENT_DISCONNECTED;
+        connected = haveIp = false;
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "WiFi received disconnect event\n");
+        break;
+      
+      default:
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Received WiFi event %d. Event not processed\n", eventId);
     }
   } else if (eventBase == IP_EVENT) {
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Wifi::eventHandler: Got IP event 0x%x\n", eventId);
 
-    if (eventId & IP_EVENT_STA_GOT_IP) {
-      if (IS_LOG_ENABLED(LOG_COMP_NET, LOG_SEV_INFO)) {
-        // For future reference, to get the IP elsewhere in the code:
-        //  tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
-        ip_event_got_ip_t *ipEvent = reinterpret_cast<ip_event_got_ip_t*>(eventData);
+    switch(eventId) {
+      case IP_EVENT_STA_GOT_IP:
+        haveIp = true;
+        setEvents |= LOCAL_WIFI_EVENT_GOT_IP;
+        if (IS_LOG_ENABLED(LOG_COMP_NET, LOG_SEV_INFO)) {
+          // For future reference, to get the IP elsewhere in the code:
+          //  tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
+          ip_event_got_ip_t *ipEvent = reinterpret_cast<ip_event_got_ip_t*>(eventData);
 
-        char ipBuf[IP4ADDR_STRLEN_MAX];
-        esp_ip4addr_ntoa(&ipEvent->ip_info.ip, ipBuf, IP4ADDR_STRLEN_MAX);
+          char ipBuf[IP4ADDR_STRLEN_MAX];
+          esp_ip4addr_ntoa(&ipEvent->ip_info.ip, ipBuf, IP4ADDR_STRLEN_MAX);
 
-        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Got IPv4 address: %s\n", ipBuf);
-      }
-    }
+          logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Got IPv4 address: %s\n", ipBuf);
+        }
+        break;
 
-    if (eventId & IP_EVENT_GOT_IP6) {
-      if (IS_LOG_ENABLED(LOG_COMP_NET, LOG_SEV_INFO)) {
-        ip_event_got_ip6_t *ipEvent = reinterpret_cast<ip_event_got_ip6_t*>(eventData);
-      
-        // Whelp, Espressif doesn't seem to provide a thread-safe ip-to-string conversion
-        // function for IPv6. I guess I'll use the unsafe one from their examples. (I'm not 
-        // going to roll my own for a trace message.)
-        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Got IPv6 address: %s\n", IPV62STR(ipEvent->ip6_info.ip));
-      }
-    }
+      case IP_EVENT_GOT_IP6:
+        haveIp = true;
+        setEvents |= LOCAL_WIFI_EVENT_GOT_IP;
+        if (IS_LOG_ENABLED(LOG_COMP_NET, LOG_SEV_INFO)) {
+          ip_event_got_ip6_t *ipEvent = reinterpret_cast<ip_event_got_ip6_t*>(eventData);
+        
+          // Whelp, Espressif doesn't seem to provide a thread-safe ip-to-string conversion
+          // function for IPv6. I guess I'll use the unsafe one from their examples. (I'm not 
+          // going to roll my own for a trace message.)
+          logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Got IPv6 address: %s\n", IPV62STR(ipEvent->ip6_info.ip));
+        }
+        break;
 
-    if (eventId & IP_EVENT_STA_LOST_IP) {
-      logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Lost Ip address\n");
+      case IP_EVENT_STA_LOST_IP:
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Lost Ip address\n");
+        connected = haveIp = false;
+        setEvents |= LOCAL_WIFI_EVENT_DISCONNECTED;
+        break;
+
+
+      default:
+        logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "Received IP event %d. Event not processed\n", eventId);
     }
   } else {
     // Shouldn't get here
     logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Wifi::eventHandler: Ignoring non-WiFi event\n");
   }
 
-  xEventGroupSetBits(wifiEvent, setEvents);
+  if (setEvents != 0) {
+    logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Wifi::eventHandler: Setting event bits: 0x%x\n", setEvents);
+    xEventGroupSetBits(wifiEvent, setEvents);
+  }
 }
 
 
@@ -542,7 +610,7 @@ bool WiFi::Init() {
   }
 
   // We'll let the thread handle the connection.
-  xTaskCreate(&wifiThreadCallback, WIFI_THREAD_NAME, 1024 * 16, this, 5, NULL);
+  xTaskCreate(&wifiThreadCallback, WIFI_THREAD_NAME, 1024 * 6, this, 5, NULL);
 
   logPrintf(LOG_COMP_NET, LOG_SEV_VERBOSE, "Waiting for WiFi start\n");
 
@@ -559,6 +627,11 @@ bool WiFi::Init() {
 ///////////////////////////////////////////////////////////////////////////////
 // Externally visible routines
 ///////////////////////////////////////////////////////////////////////////////
+
+bool WaitForConnection(uint32_t maxWaitMs) {
+  return WiFi::GetWiFi()->WaitForConnection(maxWaitMs);
+}
+
 
 bool ListNetworks(SsidList *ssidList) {
   uint16_t number = DEFAULT_SCAN_LIST_SIZE;
@@ -615,7 +688,6 @@ bool Init() {
     return false;
   }
 
-  ListNetworks();
   logPrintf(LOG_COMP_NET, LOG_SEV_INFO, "WiFi initialized!\n");
 
   return true;

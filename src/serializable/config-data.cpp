@@ -79,6 +79,21 @@ bool WifiData::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
 ///////////////////////////////////////////////////////////////////////////////
 bool ConfigData::DeserializeSelf(const ArduinoJson::JsonObject& obj) {
   try {
+    const char *strDataUrl = obj["data-url"].as<const char*>();
+    if (strDataUrl) {
+      dataUrl = strDataUrl;
+      logPrintf(LOG_COMP_SERIALIZE, LOG_SEV_VERBOSE, "Set Config::dataUrl to %s\n", dataUrl.c_str());
+    } else {
+      logPrintf(LOG_COMP_SERIALIZE, LOG_SEV_INFO, "data-url is missing from config\n");
+    }
+
+    configCheckIntervalSeconds = obj["config-check-interval-seconds"].as<uint32_t>();
+    if (configCheckIntervalSeconds > MAX_CONFIG_CHECK_INTERVAL_SECONDS) {
+      // Anything this large is probably unintentional.
+      // A value of zero means to never check, except when manually requested.
+      configCheckIntervalSeconds = DEFAULT_CONFIG_CHECK_INTERVAL_SECONDS;
+    }
+
     ArduinoJson::JsonObject jsonWifi = obj["wifi"].as<ArduinoJson::JsonObject>();
     if (jsonWifi) {
       if (!wifiData.DeserializeSelf(jsonWifi)) {

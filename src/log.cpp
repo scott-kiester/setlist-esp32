@@ -84,6 +84,10 @@ void logvPrintf(const char* str, ...) {
           Serial.write(writeThis, strlen(writeThis));
           break;
 
+        case 'z':
+          Serial.printf("%zu", va_arg(args, size_t));
+          break;
+
         default:
           Serial.print(F("*** INVALID logvPrintf format specifier: ")); Serial.println(*(cur + 1)); 
       }
