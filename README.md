@@ -38,5 +38,5 @@ Below are a few photos of the device in action.
 ![image](resources/attached-to-drum-rack.jpg)
 <br/><br/>
 
-### On stage, with a full drum kit:\
+### On stage, with a full drum kit
 ![image](resources/full-kit.jpg)
