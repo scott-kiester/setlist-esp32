@@ -18,8 +18,8 @@ This project builds with Platform IO and the ESP-IDF SDK, verison 5.3 or later. 
 project does not rely on the Arduino libraries, and uses ESP-IDF/FreeRTOS instead.
 
 # Note
-Please be aware that this is a hobby project. It's not complete, and there are a handful of minor, annoying bugs. It is, however, functional enough and reliable enough
-that I've relied on it for every gig I've played for the past year. Most of my efforts now are going into a new version that supports a larger touch screen and uses
+Please be aware that this is a hobby project. It's not complete, and there are a handful of minor, annoying bugs. However, it is functional enough and reliable enough
+that I've used on it for every gig I've played for the past year. Most of my efforts now are going into a new version that supports a larger touch screen and uses
 [LVGL](https://github.com/lvgl/lvgl) for the UI.
 
 # Usage
