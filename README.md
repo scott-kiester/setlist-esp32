@@ -19,7 +19,7 @@ project does not rely on the Arduino libraries, and uses ESP-IDF/FreeRTOS instea
 
 # Note
 Please be aware that this is a hobby project. It's not complete, and there are a handful of minor, annoying bugs. However, it is functional enough and reliable enough
-that I've used on it for every gig I've played for the past year. Most of my efforts now are going into a new version that supports a larger touch screen and uses
+that I've used it for every gig I've played during the past year. Most of my efforts now are going into a new version that supports a larger touch screen and uses
 [LVGL](https://github.com/lvgl/lvgl) for the UI.
 
 # Usage
